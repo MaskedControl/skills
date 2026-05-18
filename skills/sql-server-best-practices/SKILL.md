@@ -8,6 +8,11 @@ description: >
   "parameter sniffing," "WITH NOLOCK," "prevent SQL injection in MSSQL," "set up db permissions,"
   "index rebuilds or backups," or "review this migration script." Use for any T-SQL code review,
   DDL review, or schema design question where the database is SQL Server or Azure SQL.
+  Skip for MySQL, PostgreSQL, SQLite, Oracle, or any non-MSSQL database — the guidance here
+  (RCSI, sp_Blitz, T-SQL syntax, SQL Agent, NEWSEQUENTIALID, etc.) does not apply to other platforms
+  and could actively mislead. Also skip for ORM-only questions (Entity Framework errors, LINQ,
+  Django migrations) where no T-SQL or SQL Server configuration is involved.
+license: Complete terms in LICENSE (MIT)
 ---
 
 # SQL Server Best Practices
