@@ -1,0 +1,12 @@
+# Eval workspaces (local testing artifacts)
+*-workspace/
+evals/
+
+# OS
+.DS_Store
+Thumbs.db
+
+# Editor
+.vscode/
+.idea/
+*.swp
