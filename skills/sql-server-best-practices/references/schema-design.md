@@ -23,24 +23,51 @@ Avoid generic names: `Data`, `Info`, `Table1`, `Type` (conflicts with T-SQL keyw
 
 ## Primary Keys and Identity
 
-Every table must have a primary key. Use integer identity columns as the default:
+Every table must have a primary key. Use a single-column **surrogate key** — either `INT IDENTITY` or `UNIQUEIDENTIFIER` with `NEWSEQUENTIALID()`. Never use composite natural keys (email + phone, name + date, etc.) as a PK.
+
+### INT IDENTITY — recommended for most OLTP
 
 ```sql
 CREATE TABLE dbo.Product (
     ProductId   INT           NOT NULL IDENTITY(1,1),
     Name        NVARCHAR(200) NOT NULL,
-    -- ...
     CONSTRAINT PK_Product PRIMARY KEY CLUSTERED (ProductId)
 );
 ```
 
-Per CLAUDE.md: all data models MUST use integer IDs as the primary identifier, auto-incremented. Each entity should have a `Name` or `Description` field.
+`IDENTITY(1,1)` means: start at 1, increment by 1 — the database assigns the next value automatically on every insert. You never set it manually. This is what makes it "auto-increment."
 
-**When to use UNIQUEIDENTIFIER (GUID):**
-- Distributed systems that merge data from multiple sources
-- Exposed in APIs where sequential IDs would be a security concern (use `NEWSEQUENTIALID()` as default, not `NEWID()`)
+**Why INT IDENTITY is the SQL Server DBA community default:**
+- 4 bytes — compact in the clustered index and in every nonclustered index that carries it as a row locator
+- Sequential inserts always land at the end of the B-tree — zero page fragmentation
+- Readable and debuggable in logs, support tickets, and conversations
+- Use `BIGINT` only if you genuinely expect > 2.1 billion rows; `INT` covers virtually all OLTP tables
 
-**Avoid**: `BIGINT` unless you genuinely expect > 2 billion rows; composite natural-key PKs (they make FKs verbose and joins slow).
+### GUID — right for distributed and cloud scenarios
+
+```sql
+CREATE TABLE dbo.Product (
+    ProductId   UNIQUEIDENTIFIER NOT NULL DEFAULT NEWSEQUENTIALID(),
+    Name        NVARCHAR(200)    NOT NULL,
+    CONSTRAINT PK_Product PRIMARY KEY CLUSTERED (ProductId)
+);
+```
+
+Use `NEWSEQUENTIALID()` as the default — it generates GUIDs in ascending order so inserts still land at the end of the clustered index. **Never use `NEWID()`** as a clustered index key — random GUIDs scatter inserts across the B-tree causing severe fragmentation.
+
+**When GUIDs are the right choice:**
+- Data merges across multiple databases or servers (GUIDs are globally unique by definition)
+- Microservices where IDs are generated client-side before the row is inserted
+- APIs where sequential integer IDs would allow enumeration by attackers
+- Azure SQL with geo-replication or sync scenarios
+
+GUIDs are 16 bytes vs 4 — every nonclustered index is larger and they are harder to read, but these are acceptable tradeoffs in the scenarios above.
+
+### What to always avoid
+
+- **Composite natural keys** (`CustomerCode + OrderDate`, `Email + Phone`): natural values change, they propagate into every FK, and joins become verbose
+- **Random GUIDs (`NEWID()`) on clustered indexes**: causes fragmentation — use `NEWSEQUENTIALID()` instead
+- **String PKs**: change over time, type-unsafe, slow to compare and join
 
 ## Data Types
 
@@ -84,12 +111,50 @@ Always create FK constraints on relationships. They:
 - Allow the optimizer to simplify join plans (FK elimination)
 - Serve as self-documenting relationships
 
-Index foreign key columns on the child table — SQL Server does not do this automatically, and unindexed FKs cause full scans during cascading deletes and joins.
+Index foreign key columns on the child table — SQL Server does not do this automatically, and unindexed FKs cause full scans during joins and deletes.
 
 ```sql
 -- After creating the FK, always add an index on the FK column(s)
 CREATE NONCLUSTERED INDEX IX_Order_CustomerId ON dbo.Order (CustomerId);
 ```
+
+### Do Not Use Cascade Deletes
+
+**Never use `ON DELETE CASCADE`.** It is one of the most dangerous options in SQL Server schema design:
+
+- A single `DELETE` on a parent row silently removes an unbounded number of child rows across one or more tables — with no warning, no confirmation, and no easy undo
+- Cascades chain: if A cascades to B, and B cascades to C, deleting one row in A can wipe out entire subtrees of data invisibly
+- Audit logs show only the parent delete — the child row destruction leaves no trace in standard logging
+- They create tight coupling between tables that makes schema changes risky
+- SQL Server will reject circular cascade paths entirely, which can force awkward schema workarounds
+
+**Use explicit deletes instead.** Handle related-row cleanup in a stored procedure or application transaction where the intent is visible and the scope is controlled:
+
+```sql
+-- BAD — invisible destruction
+ALTER TABLE dbo.OrderItem
+    ADD CONSTRAINT FK_OrderItem_Order
+    FOREIGN KEY (OrderId) REFERENCES dbo.Order(OrderId)
+    ON DELETE CASCADE;  -- Never do this
+
+-- GOOD — explicit, auditable, intentional
+CREATE OR ALTER PROCEDURE dbo.usp_DeleteOrder
+    @OrderId INT
+AS
+BEGIN
+    SET NOCOUNT ON;
+    SET XACT_ABORT ON;
+    BEGIN TRANSACTION;
+        DELETE FROM dbo.OrderItem  WHERE OrderId = @OrderId;
+        DELETE FROM dbo.OrderNote  WHERE OrderId = @OrderId;
+        DELETE FROM dbo.Order      WHERE OrderId = @OrderId;
+    COMMIT TRANSACTION;
+END;
+```
+
+The default FK behavior (`NO ACTION`) is correct — let the database reject deletes that would orphan child rows, and force the caller to clean up explicitly.
+
+`ON DELETE SET NULL` has similar problems (silently corrupts FK relationships) and should also be avoided. `ON UPDATE CASCADE` is occasionally reasonable for natural-key schemas but is rarely needed with integer identity PKs.
 
 ## NULL vs NOT NULL
 
@@ -120,6 +185,10 @@ This also makes it easy to grant a reporting user `EXECUTE` on the `reporting` s
 **Storing delimited lists in a column:** `Tags = 'red,blue,green'` prevents indexing and joining. Use a child table with a proper FK, or use JSON if the structure is truly dynamic.
 
 **`SELECT *` in views and procs:** Column additions/reorders can silently break dependent code. Always list columns explicitly.
+
+**`ON DELETE CASCADE`:** See the Foreign Keys section above. Never use it. The silent mass-deletion risk far outweighs the convenience.
+
+**Composite natural keys or string PKs:** Use a surrogate key (`INT IDENTITY` or `UNIQUEIDENTIFIER` with `NEWSEQUENTIALID()`) instead. Natural values change, string comparisons are slower, and composite keys propagate every column into every FK. See the Primary Keys section above for guidance on INT vs GUID.
 
 ## Versioning and Migrations
 

@@ -2,11 +2,12 @@
 name: sql-server-best-practices
 description: >
   SQL Server and Azure SQL best practices for developers and DBAs. Use this skill whenever the user
-  is writing T-SQL, designing schemas, asking about indexes, query performance, database security,
-  or SQL Server maintenance — even if they don't explicitly mention "best practices." Triggers on
-  requests like "write a stored proc," "should I use a cursor here," "how should I name this table,"
-  "why is this query slow," "set up db permissions," or "how do I maintain indexes." Also use for
-  code review of any SQL or schema migration files.
+  asks about T-SQL, stored procedures, query performance, indexes, schema design, database security,
+  or SQL Server / Azure SQL maintenance — even if they don't say "best practices." Triggers on
+  requests like "write a stored proc," "this query is slow," "clustered vs nonclustered index,"
+  "parameter sniffing," "WITH NOLOCK," "prevent SQL injection in MSSQL," "set up db permissions,"
+  "index rebuilds or backups," or "review this migration script." Use for any T-SQL code review,
+  DDL review, or schema design question where the database is SQL Server or Azure SQL.
 ---
 
 # SQL Server Best Practices
@@ -39,12 +40,46 @@ These apply regardless of domain — internalize them before reading any referen
 5. **Don't guess — measure.** Use execution plans, `SET STATISTICS IO ON`, and `sp_BlitzCache` rather than intuiting performance.
 6. **Least surprise.** Name things clearly. A reader unfamiliar with the system should be able to understand what a table, column, or proc does from its name alone.
 
+## Always Flag — Regardless of What Was Asked
+
+When reviewing any SQL, DDL, or migration code, always call out the following issues unprompted — even if the user only asked about something else:
+
+- **`ON DELETE CASCADE`** — warn that it will silently delete child rows without confirmation or audit trail. Recommend removing it and handling deletes explicitly in a stored procedure instead.
+- **`ON DELETE SET NULL`** — warn that it silently breaks FK relationships. Recommend explicit handling.
+- **`NOLOCK` / `WITH (NOLOCK)`** — warn about dirty reads and phantom rows. Recommend enabling RCSI at the database level instead.
+- **`EXEC(@sql)`** with string concatenation — flag as SQL injection risk. Recommend `sp_executesql` with parameters.
+
+Keep the callout brief and constructive — one or two sentences, then move on to what the user actually asked.
+
+## Pre-Flight Questions
+
+Before writing any DDL or stored procedures, ask the questions below if the answers aren't already clear from context. Ask them together upfront — don't generate code first and ask after.
+
+**For any stored procedure or T-SQL code:**
+
+- **Naming convention** — ask once per conversation:
+  > "What prefix do you use for stored procedures — `usp_` (common default), none, or something else?"
+  > Note: avoid `sp_` — SQL Server searches the master database first for any proc starting with `sp_`, which causes unnecessary overhead and confusion with system procedures.
+
+**For schema / table design or new database setup:**
+
+- **Primary key type** — ask once per conversation:
+  > "Do you prefer **INT IDENTITY** (auto-increment integers: 1, 2, 3…) or **GUID** (UNIQUEIDENTIFIER — globally unique, better for distributed systems)?"
+
+- **Soft deletes** — ask when designing tables that represent entities users might "delete":
+  > "Do you want soft deletes (an `IsDeleted BIT` flag + `DeletedAt DATETIME2` column so rows are hidden but not removed) or hard deletes (physically remove the row)?"
+
+- **Audit trail** — ask for any new schema:
+  > "Do you want standard audit columns on each table — `CreatedAt DATETIME2`, `UpdatedAt DATETIME2`, and optionally `CreatedBy` / `UpdatedBy`?"
+
+If the user has already answered any of these earlier in the conversation, use that answer — don't ask again.
+
 ## Determining Which Reference(s) to Read
 
 Ask yourself what the user is trying to accomplish:
 
 - **"Write/fix/review a query or stored proc"** → `query-patterns.md`
-- **"Why is this slow / add an index / review query plan"** → `indexing.md` (and possibly `query-patterns.md`)
+- **"Why is this slow / add an index / review query plan"** → `indexing.md` + `maintenance.md` (sp_BlitzCache/sp_BlitzFirst live there) + possibly `query-patterns.md` for SARGability
 - **"Design a table / choose a data type / naming question"** → `schema-design.md`
 - **"Set up permissions / prevent SQL injection / audit access"** → `security.md`
 - **"Set up maintenance jobs / check database health / configure backups"** → `maintenance.md`

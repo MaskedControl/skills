@@ -23,12 +23,37 @@ REVOKE SELECT, INSERT, UPDATE ON SCHEMA::dbo FROM AppUser;
 
 **For read-only connections** (reporting, dashboards):
 ```sql
-EXEC sp_addrolemember 'db_datareader', 'ReportingUser';
--- Or use a dedicated reporting schema:
+-- ALTER ROLE is the current syntax (sp_addrolemember is deprecated since SQL Server 2012)
+ALTER ROLE db_datareader ADD MEMBER ReportingUser;
+-- Or use a dedicated reporting schema for tighter scoping:
 GRANT SELECT ON SCHEMA::reporting TO ReportingUser;
 ```
 
 Separate logins for: application writes, application reads, reporting, ETL, and DBAs.
+
+## Authentication: Windows vs SQL
+
+**Prefer Windows Authentication for on-premises SQL Server.** It is more secure because:
+- No password stored in SQL Server (Kerberos/NTLM handles it)
+- Subject to Active Directory password policies, account lockout, and group membership
+- Easier to audit — logs show the actual Windows identity
+
+```sql
+-- Windows login (no password — AD manages it)
+CREATE LOGIN [DOMAIN\AppServiceAccount] FROM WINDOWS;
+```
+
+Use SQL Authentication only when:
+- Connecting from a non-Windows client or cross-forest without trust
+- Azure SQL (Windows auth requires Azure AD integration — use that, not basic SQL auth where possible)
+- Local development/testing
+
+**Azure SQL:** Use Azure Active Directory (Entra ID) authentication instead of SQL logins — it supports MFA, conditional access, and managed identities (no stored credentials at all):
+```sql
+-- Grant a managed identity access to Azure SQL
+CREATE USER [my-app-managed-identity] FROM EXTERNAL PROVIDER;
+ALTER ROLE db_datareader ADD MEMBER [my-app-managed-identity];
+```
 
 ## SQL Injection Prevention
 

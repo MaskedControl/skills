@@ -91,9 +91,9 @@ Detection: plan looks right for some inputs but terrible for others.
 
 Mitigation options (in order of preference):
 1. `OPTION (OPTIMIZE FOR UNKNOWN)` — use average statistics, not the sniffed value
-2. `OPTION (RECOMPILE)` on the specific statement — recompile on every execution (CPU cost, good for reports)
-3. Local variable trick — assign params to local variables before use (loses sniffing entirely)
-4. Separate procs for wildly different data distributions
+2. `OPTION (RECOMPILE)` on the specific statement — recompile on every execution (CPU cost; good for infrequent or highly variable queries)
+3. Separate procs for wildly different data distributions (e.g. `usp_GetOrders_LargeCustomer` vs `usp_GetOrders_SmallCustomer`)
+4. **Local variable trick (last resort)** — assign params to local variables before use
 
 ```sql
 -- Option 1: good default for most cases
@@ -103,7 +103,21 @@ OPTION (OPTIMIZE FOR UNKNOWN);
 -- Option 2: use when the query runs infrequently and data varies a lot
 SELECT * FROM dbo.Orders WHERE CustomerId = @CustomerId
 OPTION (RECOMPILE);
+
+-- Option 4: local variable trick — only when options 1-3 have failed
+-- Assigns the parameter to a local variable, which forces the optimizer
+-- to use average statistics rather than the sniffed value.
+-- Downside: no plan reuse at all — a new plan is compiled every execution.
+-- Use it when OPTIMIZE FOR UNKNOWN still produces a bad plan and RECOMPILE
+-- has too much CPU overhead for a high-frequency proc.
+CREATE OR ALTER PROCEDURE dbo.usp_GetOrders @CustomerId INT AS
+BEGIN
+    DECLARE @LocalCustomerId INT = @CustomerId;  -- breaks sniffing
+    SELECT * FROM dbo.Orders WHERE CustomerId = @LocalCustomerId;
+END;
 ```
+
+**The local variable trick is real and sometimes the only fix.** It's listed last because it gives up all plan reuse, which is expensive at high call frequency. But if `OPTIMIZE FOR UNKNOWN` still produces a catastrophically bad plan and `RECOMPILE` is too slow, this is a legitimate production solution — not a hack to be ashamed of. Document why it's there so the next developer understands the intent.
 
 ## Cursors and Row-by-Row Processing
 
@@ -185,3 +199,42 @@ EXEC sp_executesql @sql, N'@status NVARCHAR(50)', @status = @status;
 ```
 
 See `references/security.md` for more on dynamic SQL and injection prevention.
+
+## Transaction Isolation Levels
+
+The default isolation level (`READ COMMITTED`) holds shared locks during reads, which can cause blocking. Understanding your options prevents both data anomalies and lock contention:
+
+| Level | Dirty reads | Non-repeatable reads | Phantom reads | Blocking on reads |
+|-------|------------|---------------------|--------------|------------------|
+| READ UNCOMMITTED | Yes | Yes | Yes | No |
+| READ COMMITTED (default) | No | Yes | Yes | Yes (brief) |
+| REPEATABLE READ | No | No | Yes | Yes |
+| SERIALIZABLE | No | No | No | Yes (heavy) |
+| SNAPSHOT | No | No | No | No |
+| READ COMMITTED SNAPSHOT (RCSI) | No | Yes | Yes | No |
+
+**Recommended for most OLTP databases:** Enable Read Committed Snapshot Isolation (RCSI) at the database level. It eliminates reader-writer blocking without changing any application code:
+
+```sql
+ALTER DATABASE AppDatabase SET READ_COMMITTED_SNAPSHOT ON;
+```
+
+Readers see a row version instead of blocking on writer locks. Writers still block each other. This is the default on Azure SQL.
+
+**Never use `NOLOCK` as a performance shortcut.** `NOLOCK` (`READ UNCOMMITTED`) can return:
+- Rows that were never committed (dirty reads)
+- The same row twice, or skip rows entirely, during a page split
+- Results from partially-applied multi-row updates
+
+The performance gain is real but the data corruption risk is too. Use RCSI instead.
+
+```sql
+-- BAD — "just add NOLOCK to make it faster" is a myth that trades speed for correctness
+SELECT * FROM dbo.Orders WITH (NOLOCK);
+
+-- GOOD — enable RCSI at the database level once; no query hints needed
+ALTER DATABASE AppDatabase SET READ_COMMITTED_SNAPSHOT ON;
+SELECT * FROM dbo.Orders;  -- now non-blocking without NOLOCK
+```
+
+The only legitimate use of `NOLOCK` is in monitoring/diagnostic queries where approximate results are explicitly acceptable.

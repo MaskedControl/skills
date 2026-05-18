@@ -148,6 +148,45 @@ Solution: ALTER INDEX ... REBUILD with INCLUDE columns added,
           or DROP and recreate with broader INCLUDE list.
 ```
 
+## Slow Query Diagnosis Workflow
+
+Follow this sequence when a query is slow. Don't skip steps — each one narrows the cause.
+
+**Step 1 — Get the actual execution plan**
+Run with `SET STATISTICS IO ON` and capture the actual (not estimated) plan in SSMS:
+```sql
+SET STATISTICS IO ON;
+SET STATISTICS TIME ON;
+-- your query here
+SET STATISTICS IO OFF;
+SET STATISTICS TIME OFF;
+```
+In the Messages tab, look for tables with high **logical reads** — that's where the problem is.
+
+**Step 2 — Read the execution plan for warning signs**
+In order of severity:
+- **Key Lookup / RID Lookup** → missing `INCLUDE` columns on a nonclustered index
+- **Table Scan / Clustered Index Scan** on a large table → no usable index, or non-SARGable predicate
+- **Sort** with high cost → missing index on `ORDER BY` column, or large result being sorted
+- **Hash Match** on joins with large row counts → missing index on join column(s), or bad cardinality estimate
+- **Warning triangle** on any operator → hover to read (implicit conversions, missing stats, spill to TempDB)
+
+**Step 3 — Check for SARGability issues**
+See `query-patterns.md` — functions on indexed columns and implicit type conversions are the most common cause of unexpected scans.
+
+**Step 4 — Check missing index suggestions**
+The execution plan may show a green "Missing Index" suggestion. Also query the DMVs (see "Missing and Unused Indexes" section above). Don't add without reviewing — the suggestions ignore write overhead.
+
+**Step 5 — Check for parameter sniffing**
+Parameter sniffing is one of the most common causes of "runs fine sometimes, terrible other times" or "fast in SSMS, slow from the app." Both symptoms point to the compiled plan being optimized for the wrong parameter values.
+
+Signs: the query has been running fine for months, then suddenly degrades after a restart or recompile. Or it runs in 10ms from SSMS with `EXEC usp_GetOrders 12345` but takes 30 seconds from the application.
+
+See the Parameter Sniffing section in `query-patterns.md` for mitigation options including `OPTIMIZE FOR UNKNOWN`, `OPTION (RECOMPILE)`, and the local variable trick (a legitimate last resort when other options fail).
+
+**Step 6 — Use sp_BlitzCache to find the worst offenders system-wide**
+See `maintenance.md` for `sp_BlitzCache` usage. Sort by `reads` or `duration` to find the queries burning the most resources.
+
 ## Heaps (Tables Without a Clustered Index)
 
 Avoid heaps for tables that are frequently read or updated. They cause:
