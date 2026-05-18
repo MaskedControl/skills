@@ -23,7 +23,24 @@ Avoid generic names: `Data`, `Info`, `Table1`, `Type` (conflicts with T-SQL keyw
 
 ## Primary Keys and Identity
 
-Every table must have a primary key. Use a single-column **surrogate key** — either `INT IDENTITY` or `UNIQUEIDENTIFIER` with `NEWSEQUENTIALID()`. Never use composite natural keys (email + phone, name + date, etc.) as a PK.
+Every table must have a primary key. For most tables, use a single-column **surrogate key** — either `INT IDENTITY` or `UNIQUEIDENTIFIER` with `NEWSEQUENTIALID()`. Never use composite natural keys (email + phone, name + date, etc.) as a PK.
+
+**Exception — junction tables:** A pure many-to-many join table (e.g., `OrderTag`, `ProductCategory`) should use a **composite PK on the two FK columns**. Adding a surrogate key to a junction table is unnecessary, wastes space, and makes the unique constraint implicit rather than enforced by the PK.
+
+```sql
+-- Junction table: composite PK, no surrogate key needed
+CREATE TABLE dbo.OrderTag (
+    OrderId  INT NOT NULL,
+    TagId    INT NOT NULL,
+    CONSTRAINT PK_OrderTag PRIMARY KEY CLUSTERED (OrderId, TagId),
+    CONSTRAINT FK_OrderTag_Order FOREIGN KEY (OrderId) REFERENCES dbo.Order(OrderId),
+    CONSTRAINT FK_OrderTag_Tag   FOREIGN KEY (TagId)   REFERENCES dbo.Tag(TagId)
+);
+-- No separate index needed on OrderId — the clustered PK covers it for the leading column
+CREATE NONCLUSTERED INDEX IX_OrderTag_TagId ON dbo.OrderTag (TagId);  -- for reverse lookups
+```
+
+If the junction table carries its own attributes (e.g., `AssignedAt`, `AssignedBy`), a surrogate PK becomes reasonable — but only then.
 
 ### INT IDENTITY — recommended for most OLTP
 
@@ -188,7 +205,7 @@ This also makes it easy to grant a reporting user `EXECUTE` on the `reporting` s
 
 **`ON DELETE CASCADE`:** See the Foreign Keys section above. Never use it. The silent mass-deletion risk far outweighs the convenience.
 
-**Composite natural keys or string PKs:** Use a surrogate key (`INT IDENTITY` or `UNIQUEIDENTIFIER` with `NEWSEQUENTIALID()`) instead. Natural values change, string comparisons are slower, and composite keys propagate every column into every FK. See the Primary Keys section above for guidance on INT vs GUID.
+**Composite natural keys or string PKs on entity tables:** Use a surrogate key (`INT IDENTITY` or `UNIQUEIDENTIFIER` with `NEWSEQUENTIALID()`) instead. Natural values change, string comparisons are slower, and composite keys propagate every column into every FK. Exception: pure junction tables (many-to-many joins) should use a composite PK on their FK columns — see the Primary Keys section above.
 
 ## Versioning and Migrations
 
