@@ -1,6 +1,6 @@
 # Agent Skills
 
-A collection of Claude Code agent skills for SQL Server, database development, and more.
+A collection of Claude Code agent skills for SQL Server, database development, document generation, and more.
 
 Skills follow the [Agent Skills](https://agentskills.io/) format and are installable via:
 
@@ -32,6 +32,30 @@ SQL Server and Azure SQL best practices for developers and DBAs. Covers T-SQL pa
 - Schema design (data types, naming conventions, constraints, foreign keys, anti-patterns)
 - Security (least privilege, injection prevention, TDE, Always Encrypted, RLS, auditing)
 - Maintenance & monitoring (sp_Blitz, sp_BlitzCache, Ola Hallengren, CHECKDB, backups, wait stats)
+
+---
+
+### create-docx
+
+Generate Word documents (.docx) using docx-js on Windows. Covers the local npm setup pattern, running and cleaning up the build script, and reusable formatting components.
+
+**Use when:**
+
+- Creating a Word document for a client, email, or report
+- Generating a .docx file programmatically from structured content
+- Building documents with screenshots placeholders, callout boxes, or styled tables
+- Reproducing a document from a previous session using the build script pattern
+
+**Topics covered:**
+
+- Windows-specific setup (local `npm install docx` pattern, why global install fails)
+- Page size and margin setup (US Letter, DXA units, content width formula)
+- Numbered lists and bullets (numbering config, table cell variant)
+- Tables (dual-width requirement, DXA only, ShadingType.CLEAR)
+- Screenshot placeholder component
+- Callout box component
+- Cleanup after generation
+- Windows validator caveat
 
 ---
 
