@@ -189,6 +189,27 @@ function callout(title, lines, fill, borderColor) {
 // Usage: callout("What to ask:", ["Question one", "Question two"], "FFF2CC", "FFC000")
 ```
 
+## Single-Cell Table Helper Pattern
+
+Single-cell tables (code blocks, callout boxes, prompt boxes) follow this structure. The closing sequence is the most common source of syntax errors — get it wrong and Node throws `Unexpected token '}'`.
+
+```javascript
+return new Table({
+  width: { size: CW, type: WidthType.DXA }, columnWidths: [CW],
+  rows: [new TableRow({ children: [new TableCell({   // opens: rows[, TableRow{, children[, TableCell{
+    borders, width: { size: CW, type: WidthType.DXA },
+    shading: { fill: "F4F4F4", type: ShadingType.CLEAR },
+    margins: { top: 120, bottom: 120, left: 200, right: 200 },
+    children: [/* paragraphs */]
+  })]})   // closes: TableCell{, TableCell(, children[, TableRow{, TableRow(
+  ]        // closes: rows[
+  });      // closes: Table{, Table(
+}
+```
+
+Closing sequence: `}` `)` `]` `}` `)` then `]` on next line, then `});`.
+**Never write `})})]`** — it skips the `]` that closes `children:[` and crashes at parse time.
+
 ## Common Mistakes
 
 | Mistake | Fix |
@@ -202,3 +223,4 @@ function callout(title, lines, fill, borderColor) {
 | Em dashes (--) appear in Word | Do not use `--` or `—` in content - rephrase the sentence instead |
 | Validator crashes on Windows | Known encoding bug in validate.py - open in Word instead |
 | node_modules left on Desktop | Always run cleanup step after generating |
+| SyntaxError: Unexpected token `}` in table helper | Missing `]` to close `children:[` of TableRow before closing `}` of TableRow args — use the single-cell table pattern above |
