@@ -1,0 +1,75 @@
+# GitHub Actions — .NET to Azure App Service
+#
+# Key points:
+# - dotnet publish produces a self-contained deployment package; deploy the output folder
+# - Use package: ./publish (not package: .) with azure/webapps-deploy@v3
+# - environment: ${{ github.ref_name }} auto-selects the GitHub Environment matching the branch,
+#   loading that environment's secrets automatically — add new branches without changing secrets
+# - scm-do-build-during-deployment and enable-oryx-build are valid on Azure/functions-action only;
+#   do not add them to the azure/webapps-deploy@v3 step
+
+name: Deploy
+
+on:
+  push:
+    branches:
+      - staging    # Add each environment branch here; secrets load from matching GitHub Environment
+      # - qa
+      # - demo
+
+env:
+  FORCE_JAVASCRIPT_ACTIONS_TO_NODE24: true    # Opt in before Node.js 20 forced cutoff
+
+jobs:
+  deploy-app:
+    name: Deploy App Service
+    runs-on: ubuntu-latest
+    environment: ${{ github.ref_name }}    # Selects GitHub Environment matching branch name
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: "8.0"    # Match your target framework version (6.0, 7.0, 8.0, 9.0)
+
+      - name: Publish
+        run: dotnet publish src/MyApp/MyApp.csproj -c Release -o ./publish
+        # Adjust path to your main web project (.csproj)
+
+      - uses: azure/login@v2
+        with:
+          creds: ${{ secrets.AZURE_CREDENTIALS }}
+
+      - name: Deploy to App Service
+        uses: azure/webapps-deploy@v3
+        with:
+          app-name: ${{ secrets.AZURE_WEBAPP_NAME }}
+          package: ./publish
+
+  # Uncomment if deploying Azure Functions alongside the web app
+  # deploy-functions:
+  #   name: Deploy Function App
+  #   runs-on: ubuntu-latest
+  #   environment: ${{ github.ref_name }}
+  #
+  #   steps:
+  #     - uses: actions/checkout@v4
+  #
+  #     - uses: actions/setup-dotnet@v4
+  #       with:
+  #         dotnet-version: "8.0"
+  #
+  #     - name: Publish Functions
+  #       run: dotnet publish src/MyFunctions/MyFunctions.csproj -c Release -o ./functions-publish
+  #
+  #     - uses: azure/login@v2
+  #       with:
+  #         creds: ${{ secrets.AZURE_CREDENTIALS }}
+  #
+  #     - uses: Azure/functions-action@v1
+  #       with:
+  #         app-name: ${{ secrets.AZURE_FUNCTIONAPP_NAME }}
+  #         package: ./functions-publish
+  #         scm-do-build-during-deployment: true    # Valid here (functions-action only)
+  #         enable-oryx-build: true

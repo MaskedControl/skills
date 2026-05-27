@@ -12,6 +12,12 @@
       "sourceType": "github",
       "skillPath": "skills/sql-server-best-practices/SKILL.md",
       "computedHash": "ca224cd8fe7bb1fb33ecfddfd533ac009d177ee5ea089aadcd7a05dd1665c34e"
+    },
+    "setup-dotnet-azure-site": {
+      "source": "MaskedControl/skills",
+      "sourceType": "github",
+      "skillPath": "skills/setup-dotnet-azure-site/SKILL.md",
+      "computedHash": "8be91f5173cd7025156d6e3dcf58c822bdb3b9c918d20eb15db9e8c255c599ec"
     }
   }
 }
