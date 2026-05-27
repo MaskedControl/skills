@@ -59,6 +59,27 @@ Generate Word documents (.docx) using docx-js on Windows. Covers the local npm s
 
 ---
 
+### setup-dotnet-azure-site
+
+End-to-end setup of a new .NET Azure deployment environment. Guides you from nothing to a live deployment site with CI/CD in one session.
+
+**Use when:**
+
+- Creating a staging, QA, demo, or testing environment for an existing .NET Azure production app
+- You need a new deployment site that mirrors production but is isolated from it
+- Setting up GitHub Actions CI/CD for a .NET app for the first time
+
+**Topics covered:**
+
+- Analyzing the production resource group to decide what to create vs share vs skip
+- Creating Azure resources (App Service, Function App, SQL databases on existing server, Application Insights, service principal)
+- Detecting existing GitHub Actions workflows or creating a fresh one from template
+- Setting up GitHub branch and GitHub Environment secrets for per-environment isolation
+- Database strategy: copy production + scrub, or empty database + EF Core migrations
+- Cost-optimised approach (~$28–43/month per environment)
+
+---
+
 ## Installation
 
 ```bash
