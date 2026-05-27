@@ -1,0 +1,17 @@
+{
+  "version": 1,
+  "skills": {
+    "create-docx": {
+      "source": "MaskedControl/skills",
+      "sourceType": "github",
+      "skillPath": "skills/create-docx/SKILL.md",
+      "computedHash": "cd0da5b08015e89b5037bf6f473061c4a7a6e5fd028cfc2b3e58de0f2ffa06dc"
+    },
+    "sql-server-best-practices": {
+      "source": "MaskedControl/skills",
+      "sourceType": "github",
+      "skillPath": "skills/sql-server-best-practices/SKILL.md",
+      "computedHash": "ca224cd8fe7bb1fb33ecfddfd533ac009d177ee5ea089aadcd7a05dd1665c34e"
+    }
+  }
+}

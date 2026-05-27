@@ -10,3 +10,6 @@ Thumbs.db
 .vscode/
 .idea/
 *.swp
+
+# Installed skill copies (generated from skills/ source)
+.agents/
